@@ -13,6 +13,16 @@
 
 package ubc.cs317.rtsp.client.net;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.Socket;
+import java.net.SocketException;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -32,6 +42,22 @@ public class RTSPConnection {
 	private Timer rtpTimer;
 
 	// TODO Add additional fields, if necessary
+	private InetAddress server;
+	private static Socket RTSPSocket;
+	private static BufferedWriter RTSPWriter;
+	private static BufferedReader RTSPReader;
+	
+	private static DatagramSocket RTPSocket;
+	
+	private int cseq;
+	private String videoName;
+	private String sessionID;
+
+	
+	private static int state;
+	static final int INIT = 0;
+	static final int READY = 1;
+	static final int PLAYING = 2;
 	
 	/**
 	 * Establishes a new connection with an RTSP server. No message is sent at
@@ -49,10 +75,20 @@ public class RTSPConnection {
 	 */
 	public RTSPConnection(Session session, String server, int port)
 			throws RTSPException {
-
+		System.out.println("Establishing RTSP connection");
 		this.session = session;
-
-		// TODO
+		try {
+			this.server = InetAddress.getByName(server);
+			RTSPSocket = new Socket(this.server, port);
+			RTSPWriter = new BufferedWriter(new OutputStreamWriter(RTSPSocket.getOutputStream()));
+			RTSPReader = new BufferedReader(new InputStreamReader(RTSPSocket.getInputStream()));			
+		}
+		catch (IOException e){
+			throw new RTSPException(e);			
+		}
+		state = INIT;
+		System.out.println("State: " + state);
+		System.out.println("RTSP connection established\n");
 	}
 
 	/**
@@ -73,8 +109,31 @@ public class RTSPConnection {
 	 *             not return a successful response.
 	 */
 	public synchronized void setup(String videoName) throws RTSPException {
-
-		// TODO
+		System.out.println("Sending SETUP request");
+		this.videoName = videoName;
+		if (state == 0) {
+			try {
+				RTPSocket = new DatagramSocket();
+				RTPSocket.setSoTimeout(1000);
+				sendRTSPRequest("SETUP"); // Send SETUP request.
+				RTSPResponse response = RTSPResponse.readRTSPResponse(RTSPReader);
+				printRTSPResponse(response);
+				if (response.getResponseCode() == 200) {
+					state = READY;
+					sessionID = response.getHeaderValue("Session");
+				} else if (response.getResponseCode() == 404) {
+					throw new RTSPException("Video not found.");
+				}
+			} catch (SocketException e) {
+				throw new RTSPException("Connection could not be established.");
+			} catch (IOException e) {
+				throw new RTSPException("Connectivity error.");
+			}
+			System.out.println("State: " + state);
+		} else {
+			throw new RTSPException("Command not expected at this time.");
+		}
+		System.out.println("SETUP request sent\n");
 	}
 
 	/**
@@ -88,8 +147,24 @@ public class RTSPConnection {
 	 *             if the server did not return a successful response.
 	 */
 	public synchronized void play() throws RTSPException {
-
-		// TODO
+		System.out.println("Sending PLAY request");
+		if (state == 1) {
+			try {
+				sendRTSPRequest("PLAY"); // Send PLAY request.
+				RTSPResponse response = RTSPResponse.readRTSPResponse(RTSPReader);
+				printRTSPResponse(response);
+				if (response.getResponseCode() == 200) {
+					state = PLAYING;
+					startRTPTimer();
+				}
+			} catch (IOException e) {
+				throw new RTSPException(e);
+			}
+			System.out.println("State: " + state);
+		} else {
+			throw new RTSPException("Command not expected at this time.");
+		}
+		System.out.println("PLAY request sent\n");
 	}
 
 	/**
@@ -117,8 +192,13 @@ public class RTSPConnection {
 	 * be thrown and no frame should be processed.
 	 */
 	private void receiveRTPPacket() {
-
-		// TODO
+		byte[] buffer = new byte[BUFFER_LENGTH];
+		DatagramPacket RTPpacket = new DatagramPacket(buffer, BUFFER_LENGTH);
+		try {
+			RTPSocket.receive(RTPpacket);
+			session.processReceivedFrame(parseRTPPacket(RTPpacket.getData(), RTPpacket.getLength()));
+		} catch (IOException e) {
+		}
 	}
 
 	/**
@@ -173,7 +253,47 @@ public class RTSPConnection {
 	 */
 	private static Frame parseRTPPacket(byte[] packet, int length) {
 
-		// TODO
-		return null; // Replace with a proper Frame
+		byte payloadType = (byte) (packet[1] & 0x7f);
+		boolean marker = false;
+		if (packet[1] >> 7 == 1) {
+			marker = true;
+		}
+		short sequenceNumber = (short) (packet[2] << 8 + packet[3]);
+		int timestamp = packet[4] << 24 + packet[5] << 16 + packet[6] << 8 + packet[7];
+		int offset = 12;
+		return new Frame(payloadType, marker, sequenceNumber, timestamp, packet, offset, length - offset);
 	}
+
+
+private void sendRTSPRequest(String request) throws RTSPException {
+	String requestString = null;
+	cseq++;
+	if (request.equals("SETUP")) {
+		requestString = request + " " + videoName + " RTSP/1.0" + "\r\n"
+				+ "CSeq: " + cseq + "\r\n"
+				+ "Transport: RTP/UDP; client_port= " + RTPSocket.getLocalPort() + "\r\n"
+				+ "\r\n";
+	} else {
+		requestString = request + " " + videoName + " RTSP/1.0" + "\r\n"
+				+ "Cseq: " + cseq + "\r\n"
+				+ "Session: " + sessionID + "\r\n"
+				+ "\r\n";
+	}
+	try {
+		RTSPWriter.write(requestString);
+		RTSPWriter.flush();
+	} catch (IOException e) {
+		throw new RTSPException(e);
+	}
+	System.out.println("client:" + requestString + "\n");
+}
+
+private void printRTSPResponse(RTSPResponse response) {
+	System.out.println("server:\n"
+			+ response.getRtspVersion() + " "
+			+ response.getResponseCode() + " "
+			+ response.getResponseMessage() + "\n"
+			+ "Cseq: " + response.getHeaderValue("cseq") + "\n"
+			+ "Session: " + response.getHeaderValue("session") + "\n");
+}
 }

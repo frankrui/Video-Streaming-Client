@@ -192,8 +192,8 @@ public class RTSPConnection {
 	 * be thrown and no frame should be processed.
 	 */
 	private void receiveRTPPacket() {
-		byte[] buffer = new byte[BUFFER_LENGTH];
-		DatagramPacket RTPpacket = new DatagramPacket(buffer, BUFFER_LENGTH);
+		byte[] packet = new byte[BUFFER_LENGTH];
+		DatagramPacket RTPpacket = new DatagramPacket(packet, BUFFER_LENGTH);
 		try {
 			RTPSocket.receive(RTPpacket);
 			session.processReceivedFrame(parseRTPPacket(RTPpacket.getData(), RTPpacket.getLength()));
@@ -212,9 +212,22 @@ public class RTSPConnection {
 	 *             if the server did not return a successful response.
 	 */
 	public synchronized void pause() throws RTSPException {
-
-		// TODO
-	}
+		if (state == 2) {
+			try {
+				sendRTSPRequest("PAUSE"); // Send PAUSE request.
+				RTSPResponse response = RTSPResponse.readRTSPResponse(RTSPReader);
+				printRTSPResponse(response);
+				if (response.getResponseCode() == 200) {
+					state = READY;
+					rtpTimer.cancel();
+				}
+			} catch (IOException e) {
+				throw new RTSPException("Connectivity error.");
+			}
+			System.out.println("State: " + state);
+		} else {
+			throw new RTSPException("Command not expected at this time.");
+		}	}
 
 	/**
 	 * Sends a TEARDOWN request to the server. This method is responsible for
@@ -230,9 +243,23 @@ public class RTSPConnection {
 	 *             if the server did not return a successful response.
 	 */
 	public synchronized void teardown() throws RTSPException {
-
-		// TODO
-	}
+		if (state == 1 || state == 2) {
+			try {
+				sendRTSPRequest("TEARDOWN"); // Send TEARDOWN request.
+				RTSPResponse response = RTSPResponse.readRTSPResponse(RTSPReader);
+				printRTSPResponse(response);
+				if (response.getResponseCode() == 200) {
+					state = INIT;
+					rtpTimer.cancel();
+					RTPSocket.close();
+				}
+			} catch (IOException e) {
+				throw new RTSPException("Connectivity error.");
+			}
+			System.out.println("State: " + state);
+		} else {
+			throw new RTSPException("Command not expected at this time.");
+		}	}
 
 	/**
 	 * Closes the connection with the RTSP server. This method should also close
@@ -240,8 +267,16 @@ public class RTSPConnection {
 	 * connection, if it is still open.
 	 */
 	public synchronized void closeConnection() {
-		// TODO
-	}
+		try {
+			cseq = 0;
+			if (RTPSocket != null) {
+				RTPSocket.close();
+			}
+			RTSPSocket.close();
+			RTSPWriter.close();
+			RTSPReader.close();
+		} catch (IOException e) {
+		}	}
 
 	/**
 	 * Parses an RTP packet into a Frame object.

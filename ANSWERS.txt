@@ -5,20 +5,35 @@ how it affects the video playback experience. Then explain what you believe is
 happening and what is causing the described behaviour.
 
 * FUNKY A
+There seem to be infrequent barely noticeable jumps during the video. It is possible that some frames are
+missing.
 
 * FUNKY B
+There are often brief jumps throughout the video, more than in FUNKY A. This may have more frames missing
+compared to FUNKY A.
 
 * FUNKY C
+The video frames seem to be out of order in this playback as the video keeps going back and forth.
 
 * FUNKY D
+This one looks to be a combination of both FUNKY B and FUNKY C as there are frequent jumps and the 
+frames are mixed up.
 
 * FUNKY E
+The video is working properly but it is just sped up. Server sending frames too fast (high frame rate) but
+no packet loss?
 
 * FUNKY F
+The video is working properly but it is slowed down. Server sending frames too slow (low frame rate) but 
+no packet loss?
 
 * FUNKY G
+The video is slowed down with some barely noticeable jumps. Server sending frames too slow plus some go 
+missing?
 
 * FUNKY H
+The video is at normal speed but this time the random pauses are slightly longer compared to the rest of 
+the funky servers. This might be due to a larger chunk of the frames going missing.
 
 
 === Statistics ===

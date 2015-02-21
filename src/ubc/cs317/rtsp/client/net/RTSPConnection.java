@@ -111,7 +111,7 @@ public class RTSPConnection {
 	public synchronized void setup(String videoName) throws RTSPException {
 		System.out.println("Sending SETUP request");
 		this.videoName = videoName;
-		if (state == 0) {
+		if (state == INIT) {
 			try {
 				RTPSocket = new DatagramSocket();
 				RTPSocket.setSoTimeout(1000);
@@ -148,7 +148,7 @@ public class RTSPConnection {
 	 */
 	public synchronized void play() throws RTSPException {
 		System.out.println("Sending PLAY request");
-		if (state == 1) {
+		if (state == READY) {
 			try {
 				sendRTSPRequest("PLAY"); // Send PLAY request.
 				RTSPResponse response = RTSPResponse.readRTSPResponse(RTSPReader);
@@ -161,6 +161,8 @@ public class RTSPConnection {
 				throw new RTSPException(e);
 			}
 			System.out.println("State: " + state);
+		} else if (state == PLAYING){
+			// TODO
 		} else {
 			throw new RTSPException("Command not expected at this time.");
 		}
@@ -212,7 +214,7 @@ public class RTSPConnection {
 	 *             if the server did not return a successful response.
 	 */
 	public synchronized void pause() throws RTSPException {
-		if (state == 2) {
+		if (state == PLAYING) {
 			try {
 				sendRTSPRequest("PAUSE"); // Send PAUSE request.
 				RTSPResponse response = RTSPResponse.readRTSPResponse(RTSPReader);
@@ -227,7 +229,8 @@ public class RTSPConnection {
 			System.out.println("State: " + state);
 		} else {
 			throw new RTSPException("Command not expected at this time.");
-		}	}
+		}	
+	}
 
 	/**
 	 * Sends a TEARDOWN request to the server. This method is responsible for
@@ -243,7 +246,7 @@ public class RTSPConnection {
 	 *             if the server did not return a successful response.
 	 */
 	public synchronized void teardown() throws RTSPException {
-		if (state == 1 || state == 2) {
+		if (state == READY || state == PLAYING) {
 			try {
 				sendRTSPRequest("TEARDOWN"); // Send TEARDOWN request.
 				RTSPResponse response = RTSPResponse.readRTSPResponse(RTSPReader);
@@ -258,8 +261,9 @@ public class RTSPConnection {
 			}
 			System.out.println("State: " + state);
 		} else {
-			throw new RTSPException("Command not expected at this time.");
-		}	}
+			throw new RTSPException("Error in sending or receiving the RTSP data.");
+		}	
+	}
 
 	/**
 	 * Closes the connection with the RTSP server. This method should also close
@@ -276,7 +280,8 @@ public class RTSPConnection {
 			RTSPWriter.close();
 			RTSPReader.close();
 		} catch (IOException e) {
-		}	}
+		}	
+	}
 
 	/**
 	 * Parses an RTP packet into a Frame object.
@@ -299,20 +304,27 @@ public class RTSPConnection {
 		return new Frame(payloadType, marker, sequenceNumber, timestamp, packet, offset, length - offset);
 	}
 
-
+/**
+ * Sends a request command to the RTSP server.
+ * 
+ * @param request
+ *   the command we are to send.
+ * @throws RTSPException
+ *   
+ */
 private void sendRTSPRequest(String request) throws RTSPException {
 	String requestString = null;
 	cseq++;
 	if (request.equals("SETUP")) {
 		requestString = request + " " + videoName + " RTSP/1.0" + "\r\n"
-				+ "CSeq: " + cseq + "\r\n"
-				+ "Transport: RTP/UDP; client_port= " + RTPSocket.getLocalPort() + "\r\n"
-				+ "\r\n";
+					+ "CSeq: " + cseq + "\r\n"
+					+ "Transport: RTP/UDP; client_port= " + RTPSocket.getLocalPort() + "\r\n"
+					+ "\r\n";
 	} else {
 		requestString = request + " " + videoName + " RTSP/1.0" + "\r\n"
-				+ "Cseq: " + cseq + "\r\n"
-				+ "Session: " + sessionID + "\r\n"
-				+ "\r\n";
+					+ "Cseq: " + cseq + "\r\n"
+					+ "Session: " + sessionID + "\r\n"
+					+ "\r\n";
 	}
 	try {
 		RTSPWriter.write(requestString);
@@ -320,9 +332,15 @@ private void sendRTSPRequest(String request) throws RTSPException {
 	} catch (IOException e) {
 		throw new RTSPException(e);
 	}
-	System.out.println("client:" + requestString + "\n");
+	System.out.println("client:\n" + requestString + "\n");
 }
 
+/**
+ * Prints the response from the RTSP server
+ * 
+ * @param response
+ *    the response string to be printed
+ */
 private void printRTSPResponse(RTSPResponse response) {
 	System.out.println("server:\n"
 			+ response.getRtspVersion() + " "

@@ -52,7 +52,11 @@ public class RTSPConnection {
 	private int cseq;
 	private String videoName;
 	private String sessionID;
-
+	
+	private static long fps;
+	private static long time;
+	private static int frameNum = 0;
+	private static int numOutOfOrder;
 	
 	private static int state;
 	static final int INIT = 0;
@@ -156,6 +160,7 @@ public class RTSPConnection {
 				if (response.getResponseCode() == 200) {
 					state = PLAYING;
 					startRTPTimer();
+					time = System.currentTimeMillis();
 				}
 			} catch (IOException e) {
 				throw new RTSPException(e);
@@ -198,8 +203,36 @@ public class RTSPConnection {
 		DatagramPacket RTPpacket = new DatagramPacket(packet, BUFFER_LENGTH);
 		try {
 			RTPSocket.receive(RTPpacket);
-			session.processReceivedFrame(parseRTPPacket(RTPpacket.getData(), RTPpacket.getLength()));
+			Frame frame = parseRTPPacket(RTPpacket.getData(), RTPpacket.getLength());
+			session.processReceivedFrame(frame);
+			int num = frame.getSequenceNumber();
+			if (num < frameNum) {
+				numOutOfOrder++;
+			} else {
+				frameNum = num;
+			}
+			fps++;
 		} catch (IOException e) {
+			long currentTime = System.currentTimeMillis();
+			time = currentTime - time - MINIMUM_DELAY_READ_PACKETS_MS;
+			time = time/1000;
+			long frameRate = fps/time;
+			int framesOutOfOrder = (int) (numOutOfOrder/time);
+			if (fps < 500) {
+				long framesLost = 500 - fps;
+				framesLost = framesLost/time;
+				System.out.println("Number of frames lost is " + framesLost + "/sec.");
+			} else if (fps == 500) {
+				System.out.println("Number of frames lost is 0/sec.");
+			}	
+			System.out.println("The frame rate was " + frameRate + "/sec.");
+			System.out.println("The number of frames out of order was " + framesOutOfOrder + "/sec.");
+			System.out.println("Total frames was " + fps + " frames.");
+			frameNum = 0;
+			numOutOfOrder = 0;
+			time = 0;
+			fps = 0;
+			rtpTimer.cancel();
 		}
 	}
 

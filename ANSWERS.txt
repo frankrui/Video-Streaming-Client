@@ -21,15 +21,15 @@ frames are mixed up.
 
 * FUNKY E
 The video is working properly but it is just sped up. Server sending frames too fast (high frame rate) but
-no packet loss?
+no packet loss.
 
 * FUNKY F
 The video is working properly but it is slowed down. Server sending frames too slow (low frame rate) but 
-no packet loss?
+no packet loss.
 
 * FUNKY G
 The video is slowed down with some barely noticeable jumps. Server sending frames too slow plus some go 
-missing?
+missing.
 
 * FUNKY H
 The video is at normal speed but this time the random pauses are slightly longer compared to the rest of 
@@ -40,17 +40,20 @@ the funky servers. This might be due to a larger chunk of the frames going missi
 
 You may add additional columns with more relevant data.
 
-FUNKY SERVER | FRAME RATE | PACKET LOSS RATE | OUT OF ORDER
-             | (pkts/sec) | (lost pkts/sec)  | (/sec)
--------------+------------+------------------+-------------
-     A       |            |                  |
-     B       |            |                  |
-     C       |            |                  |
-     D       |            |                  |
-     E       |            |                  |
-     F       |            |                  |
-     G       |            |                  |
-     H       |            |                  |
+movie.Mjpeg = 500 frames, approx 20 secs
+
+FUNKY SERVER | FRAME RATE | PACKET LOSS RATE | OUT OF ORDER | TOTAL NUMBER
+             | (pkts/sec) | (lost pkts/sec)  | (/sec)       | OF PACKETS
+-------------+------------+------------------+--------------+--------------
+  REGULAR    |    25      |        0         |      0       |      500
+     A       |    22      |        2         |              |     ~459
+     B       |    15      |       10         |              |     ~300
+     C       |    25      |        0         |              |      500
+     D       |    13      |       10         |              |     ~273
+     E       |    41      |       41         |              |     ~251
+     F       |    10      |        0         |              |      500
+     G       |     7      |        2         |              |     ~395
+     H       |    21      |        3         |              |     ~438
 
 
 === Result of analysis ===

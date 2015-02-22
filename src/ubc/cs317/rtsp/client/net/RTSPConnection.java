@@ -204,14 +204,16 @@ public class RTSPConnection {
 		try {
 			RTPSocket.receive(RTPpacket);
 			Frame frame = parseRTPPacket(RTPpacket.getData(), RTPpacket.getLength());
-			short num = frame.getSequenceNumber();
-			//System.out.println(num);
-			if (num != frameNum) {
-				numOutOfOrder++;
-			}
 			session.processReceivedFrame(frame);
+			short num = frame.getSequenceNumber();
 			
-			frameNum++;
+			//System.out.println(num);
+			if (num < frameNum) {
+				numOutOfOrder++;
+			} else {
+				frameNum = num;
+			}
+			
 			fps++;
 		} catch (IOException e) {
 			long currentTime = System.currentTimeMillis();
@@ -335,7 +337,7 @@ public class RTSPConnection {
 		short sequenceNumber = (short) (((packet[2] & 0xff) << 8) + (packet[3] & 0xff));
 		int timestamp = packet[4] << 24 + packet[5] << 16 + packet[6] << 8 + packet[7];
 		int offset = 12;
-		System.out.println(sequenceNumber);
+		//System.out.println(sequenceNumber);
 		return new Frame(payloadType, marker, sequenceNumber, timestamp, packet, offset, length - offset);
 	}
 

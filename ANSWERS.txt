@@ -46,33 +46,43 @@ FUNKY SERVER | FRAME RATE | PACKET LOSS RATE | OUT OF ORDER | TOTAL NUMBER
              | (pkts/sec) | (lost pkts/sec)  | (/sec)       | OF PACKETS
 -------------+------------+------------------+--------------+--------------
   REGULAR    |    25      |        0         |      0       |      500
-     A       |    22      |        2         |              |     ~459
-     B       |    15      |       10         |              |     ~300
-     C       |    25      |        0         |              |      500
-     D       |    13      |       10         |              |     ~273
-     E       |    41      |       41         |              |     ~251
-     F       |    10      |        0         |              |      500
-     G       |     7      |        2         |              |     ~395
-     H       |    21      |        3         |              |     ~438
-
+     A       |    22      |        2         |      0       |     ~459
+     B       |    15      |       10         |      0       |     ~300
+     C       |    25      |        0         |      4       |      500
+     D       |    13      |       10         |      2       |     ~273
+     E       |    41      |       41         |      0       |     ~251
+     F       |    10      |        0         |      0       |      500
+     G       |     7      |        2         |      0       |     ~395
+     H       |    21      |        3         |      0       |     ~426
+* STATISTICS TAKEN FROM movie.Mjpeg ONLY
 
 === Result of analysis ===
 
 Explain in a few words what you believe is actually happening based on the statistics above.
 
-* FUNKY A
+* FUNKY A: Some packets are being lost here and there but usually not in huge chunks so jumps are barely
+noticeable. This gives the lower frame rate due to lost packets as well as a low packet loss rate.
 
-* FUNKY B
+* FUNKY B: More packets are being lost every where and now the jumps are noticeable. This gives an even
+lower frame rate due to lost packets compared to FUNKY A as well as a higher packet loss rate.
 
-* FUNKY C
+* FUNKY C: All packets were sent successfully and frame rate is normal. Only thing is that the packets
+were not sent in order which resulted in a high rate of frames out of order. This gives off the shaking
+camera feel to the video.
 
-* FUNKY D
+* FUNKY D: This server did not send the packets in the correct order and also lost some packets during
+delivery. This led to a low frame rate as well as a high packet loss rate and frame out of order rate.
 
-* FUNKY E
+* FUNKY E: This server sent the packets way too quickly and as a result the client could not receive them
+properly. Hence, many packets were lost and the video shortened by a great amount. This led to the high
+frame rate as well as a very high packet loss rate.
 
-* FUNKY F
+* FUNKY F: This server sent the packets very slowly but successfully. As a result the video time dragged
+on for longer than normal resulting in the lower frame rate.
 
-* FUNKY G
+* FUNKY G: This server sent the packets slowly while also loosing some packets in the process. This
+increased the play time and resulted in an even lower frame rate than FUNKY F due to lost packets.
 
-* FUNKY H
+* FUNKY H: This server lost packets at the same rate as FUNKY A however it may be loosing them in chunks
+rather than all over the place, thus resulting in longer than normal jumps.
 

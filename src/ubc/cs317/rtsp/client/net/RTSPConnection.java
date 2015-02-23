@@ -23,6 +23,9 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.net.SocketException;
+import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -37,8 +40,9 @@ public class RTSPConnection {
 
 	private static final int BUFFER_LENGTH = 15000;
 	private static final long MINIMUM_DELAY_READ_PACKETS_MS = 20;
+	private static final long MINIMUM_PACKETS_TO_PLAY = 50;
 
-	private Session session;
+	private static Session session;
 	private Timer rtpTimer;
 
 	// TODO Add additional fields, if necessary
@@ -46,23 +50,24 @@ public class RTSPConnection {
 	private static Socket RTSPSocket;
 	private static BufferedWriter RTSPWriter;
 	private static BufferedReader RTSPReader;
-	
+
 	private static DatagramSocket RTPSocket;
-	
+	private static ArrayList<Frame> frameBuffer = new ArrayList<Frame>();
+
 	private int cseq;
 	private String videoName;
 	private String sessionID;
-	
+
 	private static long fps;
 	private static long time;
 	private static int frameNum = 0;
 	private static int numOutOfOrder = 0;
-	
+
 	private static int state;
 	static final int INIT = 0;
 	static final int READY = 1;
 	static final int PLAYING = 2;
-	
+
 	/**
 	 * Establishes a new connection with an RTSP server. No message is sent at
 	 * this point, and no stream is set up.
@@ -84,11 +89,12 @@ public class RTSPConnection {
 		try {
 			this.server = InetAddress.getByName(server);
 			RTSPSocket = new Socket(this.server, port);
-			RTSPWriter = new BufferedWriter(new OutputStreamWriter(RTSPSocket.getOutputStream()));
-			RTSPReader = new BufferedReader(new InputStreamReader(RTSPSocket.getInputStream()));			
-		}
-		catch (IOException e){
-			throw new RTSPException(e);			
+			RTSPWriter = new BufferedWriter(new OutputStreamWriter(
+					RTSPSocket.getOutputStream()));
+			RTSPReader = new BufferedReader(new InputStreamReader(
+					RTSPSocket.getInputStream()));
+		} catch (IOException e) {
+			throw new RTSPException(e);
 		}
 		state = INIT;
 		System.out.println("State: " + state);
@@ -120,7 +126,8 @@ public class RTSPConnection {
 				RTPSocket = new DatagramSocket();
 				RTPSocket.setSoTimeout(1000);
 				sendRTSPRequest("SETUP"); // Send SETUP request.
-				RTSPResponse response = RTSPResponse.readRTSPResponse(RTSPReader);
+				RTSPResponse response = RTSPResponse
+						.readRTSPResponse(RTSPReader);
 				printRTSPResponse(response);
 				if (response.getResponseCode() == 200) {
 					state = READY;
@@ -155,7 +162,8 @@ public class RTSPConnection {
 		if (state == READY) {
 			try {
 				sendRTSPRequest("PLAY"); // Send PLAY request.
-				RTSPResponse response = RTSPResponse.readRTSPResponse(RTSPReader);
+				RTSPResponse response = RTSPResponse
+						.readRTSPResponse(RTSPReader);
 				printRTSPResponse(response);
 				if (response.getResponseCode() == 200) {
 					state = PLAYING;
@@ -166,7 +174,7 @@ public class RTSPConnection {
 				throw new RTSPException(e);
 			}
 			System.out.println("State: " + state);
-		} else if (state == PLAYING){
+		} else if (state == PLAYING) {
 			// TODO
 		} else {
 			throw new RTSPException("Command not expected at this time.");
@@ -203,39 +211,44 @@ public class RTSPConnection {
 		DatagramPacket RTPpacket = new DatagramPacket(packet, BUFFER_LENGTH);
 		try {
 			RTPSocket.receive(RTPpacket);
-			Frame frame = parseRTPPacket(RTPpacket.getData(), RTPpacket.getLength());
-			session.processReceivedFrame(frame);
-			short num = frame.getSequenceNumber();
+			Frame frame = parseRTPPacket(RTPpacket.getData(),RTPpacket.getLength());
+			frameBuffer.add(frame);
+			orderFrames(frameBuffer);
+			if (frameBuffer.size() == 50) {
+				Thread t = new Thread(new FrameHandler());
+			}
 			
-			//System.out.println(num);
+//			if (frameBuffer.size() >= 50) {
+//				session.processReceivedFrame(frameBuffer.get(0));
+//				frameBuffer.remove(0);
+//			}
+			short num = frame.getSequenceNumber();
+
+			// System.out.println(num);
 			if (num < frameNum) {
 				numOutOfOrder++;
 			} else {
 				frameNum = num;
 			}
-			
+
 			fps++;
 		} catch (IOException e) {
 			long currentTime = System.currentTimeMillis();
 			time = currentTime - time - MINIMUM_DELAY_READ_PACKETS_MS;
-			time = time/1000;
-			long frameRate = fps/time;
-			int framesOutOfOrder = (int) (numOutOfOrder/time);
-			if (fps < 500) {
-				long framesLost = 500 - fps;
-				framesLost = framesLost/time;
-				System.out.println("Number of frames lost is " + framesLost + "/sec.");
-			} else if (fps == 500) {
-				System.out.println("Number of frames lost is 0/sec.");
-			}	
-			System.out.println("The frame rate was " + frameRate + "/sec.");
-			System.out.println("The number of frames out of order was " + framesOutOfOrder + "/sec.");
-			System.out.println("Total frames was " + fps + " frames.");
-			frameNum = 0;
-			numOutOfOrder = 0;
-			time = 0;
-			fps = 0;
+			time = time / 1000;
+			//printStats(time);
+			
 			rtpTimer.cancel();
+			RTPSocket.close();
+			
+//			for (Frame f : frameBuffer) {
+//				session.processReceivedFrame(f);
+//				try {
+//					Thread.sleep(MINIMUM_DELAY_READ_PACKETS_MS);
+//				} catch (InterruptedException e1) {
+//					e1.printStackTrace();
+//				}
+//			}
 		}
 	}
 
@@ -253,7 +266,8 @@ public class RTSPConnection {
 		if (state == PLAYING) {
 			try {
 				sendRTSPRequest("PAUSE"); // Send PAUSE request.
-				RTSPResponse response = RTSPResponse.readRTSPResponse(RTSPReader);
+				RTSPResponse response = RTSPResponse
+						.readRTSPResponse(RTSPReader);
 				printRTSPResponse(response);
 				if (response.getResponseCode() == 200) {
 					state = READY;
@@ -265,7 +279,7 @@ public class RTSPConnection {
 			System.out.println("State: " + state);
 		} else {
 			throw new RTSPException("Command not expected at this time.");
-		}	
+		}
 	}
 
 	/**
@@ -285,7 +299,8 @@ public class RTSPConnection {
 		if (state == READY || state == PLAYING) {
 			try {
 				sendRTSPRequest("TEARDOWN"); // Send TEARDOWN request.
-				RTSPResponse response = RTSPResponse.readRTSPResponse(RTSPReader);
+				RTSPResponse response = RTSPResponse
+						.readRTSPResponse(RTSPReader);
 				printRTSPResponse(response);
 				if (response.getResponseCode() == 200) {
 					state = INIT;
@@ -297,8 +312,9 @@ public class RTSPConnection {
 			}
 			System.out.println("State: " + state);
 		} else {
-			throw new RTSPException("Error in sending or receiving the RTSP data.");
-		}	
+			throw new RTSPException(
+					"Error in sending or receiving the RTSP data.");
+		}
 	}
 
 	/**
@@ -316,7 +332,7 @@ public class RTSPConnection {
 			RTSPWriter.close();
 			RTSPReader.close();
 		} catch (IOException e) {
-		}	
+		}
 	}
 
 	/**
@@ -337,53 +353,103 @@ public class RTSPConnection {
 		short sequenceNumber = (short) (((packet[2] & 0xff) << 8) + (packet[3] & 0xff));
 		int timestamp = packet[4] << 24 + packet[5] << 16 + packet[6] << 8 + packet[7];
 		int offset = 12;
-		//System.out.println(sequenceNumber);
-		return new Frame(payloadType, marker, sequenceNumber, timestamp, packet, offset, length - offset);
+		return new Frame(payloadType, marker, sequenceNumber, timestamp,
+				packet, offset, length - offset);
 	}
 
-/**
- * Sends a request command to the RTSP server.
- * 
- * @param request
- *   the command we are to send.
- * @throws RTSPException
- *   
- */
-private void sendRTSPRequest(String request) throws RTSPException {
-	String requestString = null;
-	cseq++;
-	if (request.equals("SETUP")) {
-		requestString = request + " " + videoName + " RTSP/1.0" + "\r\n"
+	/**
+	 * Sends a request command to the RTSP server.
+	 * 
+	 * @param request
+	 *            the command we are to send.
+	 * @throws RTSPException
+	 * 
+	 */
+	private void sendRTSPRequest(String request) throws RTSPException {
+		String requestString = null;
+		cseq++;
+		if (request.equals("SETUP")) {
+			requestString = request + " " + videoName + " RTSP/1.0" + "\r\n"
 					+ "CSeq: " + cseq + "\r\n"
-					+ "Transport: RTP/UDP; client_port= " + RTPSocket.getLocalPort() + "\r\n"
-					+ "\r\n";
-	} else {
-		requestString = request + " " + videoName + " RTSP/1.0" + "\r\n"
-					+ "Cseq: " + cseq + "\r\n"
-					+ "Session: " + sessionID + "\r\n"
-					+ "\r\n";
+					+ "Transport: RTP/UDP; client_port= "
+					+ RTPSocket.getLocalPort() + "\r\n" + "\r\n";
+		} else {
+			requestString = request + " " + videoName + " RTSP/1.0" + "\r\n"
+					+ "Cseq: " + cseq + "\r\n" + "Session: " + sessionID
+					+ "\r\n" + "\r\n";
+		}
+		try {
+			RTSPWriter.write(requestString);
+			RTSPWriter.flush();
+		} catch (IOException e) {
+			throw new RTSPException(e);
+		}
+		System.out.println("client:\n" + requestString + "\n");
 	}
-	try {
-		RTSPWriter.write(requestString);
-		RTSPWriter.flush();
-	} catch (IOException e) {
-		throw new RTSPException(e);
-	}
-	System.out.println("client:\n" + requestString + "\n");
-}
 
-/**
- * Prints the response from the RTSP server
- * 
- * @param response
- *    the response string to be printed
- */
-private void printRTSPResponse(RTSPResponse response) {
-	System.out.println("server:\n"
-			+ response.getRtspVersion() + " "
-			+ response.getResponseCode() + " "
-			+ response.getResponseMessage() + "\n"
-			+ "Cseq: " + response.getHeaderValue("cseq") + "\n"
-			+ "Session: " + response.getHeaderValue("session") + "\n");
-}
+	/**
+	 * Prints the response from the RTSP server
+	 * 
+	 * @param response
+	 *            the response string to be printed
+	 */
+	private void printRTSPResponse(RTSPResponse response) {
+		System.out.println("server:\n" + response.getRtspVersion() + " "
+				+ response.getResponseCode() + " "
+				+ response.getResponseMessage() + "\n" + "Cseq: "
+				+ response.getHeaderValue("cseq") + "\n" + "Session: "
+				+ response.getHeaderValue("session") + "\n");
+	}
+	
+	/**
+	 * Prints the statistics from the video
+	 * 
+	 * @param time
+	 *          the time it took to play the video
+	 */
+	private void printStats(long time) {
+		long frameRate = fps / time;
+		int framesOutOfOrder = (int) (numOutOfOrder / time);
+		if (fps < 500) {
+			long framesLost = 500 - fps;
+			framesLost = framesLost / time;
+			System.out.println("Number of frames lost is " + framesLost + "/sec.");
+		} else if (fps == 500) {
+			System.out.println("Number of frames lost is 0/sec.");
+		}
+		System.out.println("The frame rate was " + frameRate + "/sec.");
+		System.out.println("The number of frames out of order was " + framesOutOfOrder + "/sec.");
+		System.out.println("Total frames was " + fps + " frames.");
+		frameNum = 0;
+		numOutOfOrder = 0;
+		this.time = 0;
+		fps = 0;
+	}
+	
+	/**
+	 * Orders the frames in the given buffer so that they are in the correct order
+	 * 
+	 * @param frames
+	 *           the frame buffer that contains the frames to be ordered
+	 */
+	private void orderFrames(ArrayList<Frame> frames) {
+		Collections.sort(frames);
+	}
+	
+	public static class FrameHandler implements Runnable {
+		
+		public void run() {
+			while(!frameBuffer.isEmpty()) {
+				
+				session.processReceivedFrame(frameBuffer.get(0));
+				frameBuffer.remove(0);
+				
+				try {
+					Thread.sleep(30);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
 }

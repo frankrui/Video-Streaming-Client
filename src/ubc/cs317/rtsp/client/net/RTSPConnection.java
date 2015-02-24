@@ -40,7 +40,7 @@ import ubc.cs317.rtsp.client.model.Session;
 public class RTSPConnection {
 
 	private static final int BUFFER_LENGTH = 15000;
-	private static final long MINIMUM_DELAY_READ_PACKETS_MS = 20;
+	private static final long MINIMUM_DELAY_READ_PACKETS_MS = 10;
 	private static final long MINIMUM_PACKETS_TO_PLAY = 50;
 
 	private static Session session;
@@ -59,10 +59,12 @@ public class RTSPConnection {
 	private String videoName;
 	private String sessionID;
 
+	private static int counter;
 	private static long fps;
 	private static long time;
 	private static int frameNum = 0;
 	private static int numOutOfOrder = 0;
+	private static boolean isClosed = false;
 
 	private static int state;
 	static final int INIT = 0;
@@ -168,6 +170,7 @@ public class RTSPConnection {
 				if (response.getResponseCode() == 200) {
 					state = PLAYING;
 					startRTPTimer();
+					isClosed = false;
 					time = System.currentTimeMillis();
 				}
 			} catch (IOException e) {
@@ -209,43 +212,52 @@ public class RTSPConnection {
 	private void receiveRTPPacket() {
 		byte[] packet = new byte[BUFFER_LENGTH];
 		DatagramPacket RTPpacket = new DatagramPacket(packet, BUFFER_LENGTH);
+		Thread t = new Thread(new FrameHandler());
 		try {
 			RTPSocket.receive(RTPpacket);
 			Frame frame = parseRTPPacket(RTPpacket.getData(),RTPpacket.getLength());
 			queue.put(frame);
 			
+			counter++;
 			//if (frameBuffer.size() == 50) {
-			//	Thread t = new Thread(new FrameHandler());
+			if (counter == 50) {
+				t.start();
+			}
 			//}
 			
-			if (queue.size() >= 50) {
-				Frame nextFrame;
-				try {
-					nextFrame = (Frame) queue.take();
-					session.processReceivedFrame(nextFrame);
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
-			}
-			short num = frame.getSequenceNumber();
+//			if (queue.size() >= 50) {
+//				Frame nextFrame;
+//				try {
+//					nextFrame = (Frame) queue.take();
+//					session.processReceivedFrame(nextFrame);
+//				} catch (InterruptedException e) {
+//					e.printStackTrace();
+//				}
+//			}
+//			short num = frame.getSequenceNumber();
 
 			// System.out.println(num);
-			if (num < frameNum) {
-				numOutOfOrder++;
-			} else {
-				frameNum = num;
-			}
+//			if (num < frameNum) {
+//				numOutOfOrder++;
+//			} else {
+//				frameNum = num;
+//			}
 
-			fps++;
+//			fps++;
 		} catch (IOException e) {
-			long currentTime = System.currentTimeMillis();
-			time = currentTime - time - MINIMUM_DELAY_READ_PACKETS_MS;
-			time = time / 1000;
+//			long currentTime = System.currentTimeMillis();
+//			time = currentTime - time - MINIMUM_DELAY_READ_PACKETS_MS;
+//			time = time / 1000;
 			//printStats(time);
-			
+			isClosed = true;
 			rtpTimer.cancel();
 			RTPSocket.close();
-			
+			try {
+				t.join(10000);
+				System.out.println("joined!");
+			} catch (InterruptedException e1) {
+				e1.printStackTrace();
+			}
 //			for (Frame f : frameBuffer) {
 //				session.processReceivedFrame(f);
 //				try {
@@ -444,19 +456,22 @@ public class RTSPConnection {
 	public static class FrameHandler implements Runnable {
 		
 		public void run() {
-			while(!queue.isEmpty()) {
-				
-				try {
-					session.processReceivedFrame((Frame) queue.take());
-				} catch (InterruptedException e1) {
-					e1.printStackTrace();
-				}
-				
-				
-				try {
-					Thread.sleep(30);
-				} catch (InterruptedException e) {
-					e.printStackTrace();
+			while(true) {
+				if(!queue.isEmpty()) {
+					try {
+						session.processReceivedFrame((Frame) queue.take());
+						Thread.sleep(40);
+					} catch (InterruptedException e1) {
+						e1.printStackTrace();
+					}
+				} else if (!isClosed && queue.isEmpty()) {
+					int iterations = 0;
+					while(queue.size() < 50 || iterations == 100) {
+						iterations++;
+					}
+				} else if (isClosed && queue.isEmpty()) {
+					System.out.println("done sending");
+					break;
 				}
 			}
 		}

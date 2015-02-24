@@ -53,18 +53,19 @@ public class RTSPConnection {
 	private static BufferedReader RTSPReader;
 
 	private static DatagramSocket RTPSocket;
-	private static PriorityBlockingQueue queue = new PriorityBlockingQueue();
+	private static PriorityBlockingQueue<Frame> queue = new PriorityBlockingQueue<Frame>();
 
 	private int cseq;
 	private String videoName;
 	private String sessionID;
+	private Thread frameSender;
 
 	private static int counter;
 	private static long fps;
 	private static long time;
 	private static int frameNum = 0;
 	private static int numOutOfOrder = 0;
-	private static boolean isClosed = false;
+	private static volatile boolean isClosed = false;
 
 	private static int state;
 	static final int INIT = 0;
@@ -169,11 +170,14 @@ public class RTSPConnection {
 				printRTSPResponse(response);
 				if (response.getResponseCode() == 200) {
 					state = PLAYING;
-					startRTPTimer();
 					isClosed = false;
+					startRTPTimer();
+					frameSender = new Thread(new FrameHandler());
+					frameSender.start();
 					time = System.currentTimeMillis();
 				}
 			} catch (IOException e) {
+				frameSender.interrupt();
 				throw new RTSPException(e);
 			}
 			System.out.println("State: " + state);
@@ -199,6 +203,7 @@ public class RTSPConnection {
 				receiveRTPPacket();
 			}
 		}, 0, MINIMUM_DELAY_READ_PACKETS_MS);
+		
 	}
 
 	/**
@@ -212,17 +217,12 @@ public class RTSPConnection {
 	private void receiveRTPPacket() {
 		byte[] packet = new byte[BUFFER_LENGTH];
 		DatagramPacket RTPpacket = new DatagramPacket(packet, BUFFER_LENGTH);
-		Thread t = new Thread(new FrameHandler());
 		try {
 			RTPSocket.receive(RTPpacket);
 			Frame frame = parseRTPPacket(RTPpacket.getData(),RTPpacket.getLength());
 			queue.put(frame);
 			
-			counter++;
-			//if (frameBuffer.size() == 50) {
-			if (counter == 50) {
-				t.start();
-			}
+			
 			//}
 			
 //			if (queue.size() >= 50) {
@@ -253,7 +253,8 @@ public class RTSPConnection {
 			rtpTimer.cancel();
 			RTPSocket.close();
 			try {
-				t.join(10000);
+				frameSender.interrupt();
+				frameSender.join(10000);
 				System.out.println("joined!");
 			} catch (InterruptedException e1) {
 				e1.printStackTrace();
@@ -321,6 +322,7 @@ public class RTSPConnection {
 				printRTSPResponse(response);
 				if (response.getResponseCode() == 200) {
 					state = INIT;
+					isClosed = true;
 					rtpTimer.cancel();
 					RTPSocket.close();
 				}
@@ -456,21 +458,44 @@ public class RTSPConnection {
 	public static class FrameHandler implements Runnable {
 		
 		public void run() {
+			init();
+			
 			while(true) {
 				if(!queue.isEmpty()) {
+					System.out.println("Sending frame");
 					try {
-						session.processReceivedFrame((Frame) queue.take());
+						session.processReceivedFrame(queue.poll());
 						Thread.sleep(40);
 					} catch (InterruptedException e1) {
-						e1.printStackTrace();
+						System.out.println("Interrupted in sending");
+						continue;
 					}
-				} else if (!isClosed && queue.isEmpty()) {
+				} else if (!isClosed && queue.isEmpty() && !Thread.currentThread().isInterrupted()) {
 					int iterations = 0;
-					while(queue.size() < 50 || iterations == 100) {
+					while((queue.size() < 50 || iterations == 50) && !Thread.currentThread().isInterrupted()) {
+						System.out.println("waiting 40ms");
 						iterations++;
+						try {
+							Thread.sleep(40);
+						} catch (InterruptedException e1) {
+							System.out.println("interrupted in waiting");
+							break;
+						}
 					}
 				} else if (isClosed && queue.isEmpty()) {
 					System.out.println("done sending");
+					break;
+				}
+			}
+		}
+
+		private void init() {
+			int iterations = 0;
+			while(queue.size() < 50 || iterations == 100) {
+				iterations++;
+				try {
+					Thread.sleep(40);
+				} catch (InterruptedException e1) {
 					break;
 				}
 			}

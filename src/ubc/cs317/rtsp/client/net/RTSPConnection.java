@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.PriorityBlockingQueue;
 
 import ubc.cs317.rtsp.client.exception.RTSPException;
 import ubc.cs317.rtsp.client.model.Frame;
@@ -52,7 +53,7 @@ public class RTSPConnection {
 	private static BufferedReader RTSPReader;
 
 	private static DatagramSocket RTPSocket;
-	private static ArrayList<Frame> frameBuffer = new ArrayList<Frame>();
+	private static PriorityBlockingQueue queue = new PriorityBlockingQueue();
 
 	private int cseq;
 	private String videoName;
@@ -126,8 +127,7 @@ public class RTSPConnection {
 				RTPSocket = new DatagramSocket();
 				RTPSocket.setSoTimeout(1000);
 				sendRTSPRequest("SETUP"); // Send SETUP request.
-				RTSPResponse response = RTSPResponse
-						.readRTSPResponse(RTSPReader);
+				RTSPResponse response = RTSPResponse.readRTSPResponse(RTSPReader);
 				printRTSPResponse(response);
 				if (response.getResponseCode() == 200) {
 					state = READY;
@@ -212,16 +212,21 @@ public class RTSPConnection {
 		try {
 			RTPSocket.receive(RTPpacket);
 			Frame frame = parseRTPPacket(RTPpacket.getData(),RTPpacket.getLength());
-			frameBuffer.add(frame);
-			orderFrames(frameBuffer);
-			if (frameBuffer.size() == 50) {
-				Thread t = new Thread(new FrameHandler());
-			}
+			queue.put(frame);
 			
-//			if (frameBuffer.size() >= 50) {
-//				session.processReceivedFrame(frameBuffer.get(0));
-//				frameBuffer.remove(0);
-//			}
+			//if (frameBuffer.size() == 50) {
+			//	Thread t = new Thread(new FrameHandler());
+			//}
+			
+			if (queue.size() >= 50) {
+				Frame nextFrame;
+				try {
+					nextFrame = (Frame) queue.take();
+					session.processReceivedFrame(nextFrame);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+			}
 			short num = frame.getSequenceNumber();
 
 			// System.out.println(num);
@@ -439,10 +444,14 @@ public class RTSPConnection {
 	public static class FrameHandler implements Runnable {
 		
 		public void run() {
-			while(!frameBuffer.isEmpty()) {
+			while(!queue.isEmpty()) {
 				
-				session.processReceivedFrame(frameBuffer.get(0));
-				frameBuffer.remove(0);
+				try {
+					session.processReceivedFrame((Frame) queue.take());
+				} catch (InterruptedException e1) {
+					e1.printStackTrace();
+				}
+				
 				
 				try {
 					Thread.sleep(30);

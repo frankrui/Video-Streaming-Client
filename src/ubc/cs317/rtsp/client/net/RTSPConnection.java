@@ -62,6 +62,7 @@ public class RTSPConnection {
     private static int numOutOfOrder = 0;
     private static volatile boolean isClosed = false;
     private static volatile boolean isPaused = false;
+    private static volatile boolean replay = false;
 
     private static int state;
     static final int INIT = 0;
@@ -168,11 +169,11 @@ public class RTSPConnection {
                 if (response.getResponseCode() == 200) {
                     state = PLAYING;
                     isClosed = false;
+                    replay = false;
                     if (isPaused) {
                         rtpTimer.cancel();
                     }
                     isPaused = false;
-                    System.out.println("starting rtp");
                     startRTPTimer();
                     frameSender = new Thread(new FrameHandler());
                     frameSender.start();
@@ -184,6 +185,7 @@ public class RTSPConnection {
             }
             System.out.println("State: " + state);
         } else if (state == PLAYING) {
+        	replay = true;
         	teardown();
         	setup(videoName);
         	play();
@@ -280,6 +282,7 @@ public class RTSPConnection {
                 if (response.getResponseCode() == 200) {
                     state = READY;
                     isPaused = true;
+                    replay = false;
                     frameSender.interrupt();
 
                 }
@@ -316,9 +319,14 @@ public class RTSPConnection {
                     state = INIT;
                     isClosed = true;
                     rtpTimer.cancel();
-                    frameSender.interrupt();
-                    RTPSocket.close();
                     queue.clear();
+                    frameSender.interrupt();
+                    try {
+						frameSender.join(10000);
+					} catch (InterruptedException e) {
+						System.out.println("join timed out");
+					}
+                    RTPSocket.close();
                 }
             } catch (IOException e) {
                 throw new RTSPException("Connectivity error.");
@@ -452,7 +460,7 @@ public class RTSPConnection {
                         Thread.sleep(40);
                     } catch (InterruptedException e1) {
                         System.out.println("Interrupted in sending");
-                        if (isPaused) {
+                        if (isPaused || replay) {
                             return;
                         } else
                             continue;
@@ -466,7 +474,7 @@ public class RTSPConnection {
                             Thread.sleep(400);
                         } catch (InterruptedException e1) {
                             System.out.println("interrupted in waiting");
-                            if (!isPaused) {
+                            if (!isPaused || !replay) {
                                 break;
                             } else
                                 return;

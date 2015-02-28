@@ -55,6 +55,7 @@ public class RTSPConnection {
     private String sessionID;
     private Thread frameSender;
 
+    private static int currentFrame = 0;
     private static int counter;
     private static long fps;
     private static long time;
@@ -133,6 +134,7 @@ public class RTSPConnection {
                 if (response.getResponseCode() == 200) {
                     state = READY;
                     sessionID = response.getHeaderValue("Session");
+                    currentFrame = 0;
                 } else if (response.getResponseCode() == 404) {
                     throw new RTSPException("Video not found.");
                 }
@@ -456,7 +458,15 @@ public class RTSPConnection {
                 if (!queue.isEmpty() && !isPaused) {
                     System.out.println("Sending frame");
                     try {
-                        session.processReceivedFrame(queue.poll());
+                    	Frame frame = queue.peek();
+                    	if (frame.getSequenceNumber() < currentFrame){
+                    		queue.remove(frame);
+                    		System.out.println("remove frame");
+                    	} else {
+                    		frame = queue.poll();
+                    		currentFrame = frame.getSequenceNumber();
+                    		session.processReceivedFrame(frame);
+                    	}                        
                         Thread.sleep(40);
                     } catch (InterruptedException e1) {
                         System.out.println("Interrupted in sending");

@@ -184,7 +184,9 @@ public class RTSPConnection {
             }
             System.out.println("State: " + state);
         } else if (state == PLAYING) {
-            // TODO
+        	teardown();
+        	setup(videoName);
+        	play();
         } else {
             throw new RTSPException("Command not expected at this time.");
         }
@@ -224,6 +226,7 @@ public class RTSPConnection {
             Frame frame = parseRTPPacket(RTPpacket.getData(),
                     RTPpacket.getLength());
             queue.put(frame);
+            fps++;
 
         } catch (SocketTimeoutException e) {
             System.out.println("Timed out");
@@ -315,6 +318,7 @@ public class RTSPConnection {
                     rtpTimer.cancel();
                     frameSender.interrupt();
                     RTPSocket.close();
+                    queue.clear();
                 }
             } catch (IOException e) {
                 throw new RTSPException("Connectivity error.");
@@ -415,9 +419,9 @@ public class RTSPConnection {
      * @param time
      *            the time it took to play the video
      */
-    private void printStats(long time) {
+    private static void printStats(long time) {
         long frameRate = fps / time;
-        int framesOutOfOrder = (int) (numOutOfOrder / time);
+        //int framesOutOfOrder = (int) (numOutOfOrder / time);
         if (fps < 500) {
             long framesLost = 500 - fps;
             framesLost = framesLost / time;
@@ -427,12 +431,11 @@ public class RTSPConnection {
             System.out.println("Number of frames lost is 0/sec.");
         }
         System.out.println("The frame rate was " + frameRate + "/sec.");
-        System.out.println("The number of frames out of order was "
+        /**System.out.println("The number of frames out of order was "
                 + framesOutOfOrder + "/sec.");
-        System.out.println("Total frames was " + fps + " frames.");
+        System.out.println("Total frames was " + fps + " frames.");**/
         frameNum = 0;
         numOutOfOrder = 0;
-        this.time = 0;
         fps = 0;
     }
 
@@ -471,6 +474,10 @@ public class RTSPConnection {
                     }
                 } else if (isClosed && queue.isEmpty()) {
                     System.out.println("done sending");
+                    long currentTime = System.currentTimeMillis();
+                	time = currentTime - time - MINIMUM_DELAY_READ_PACKETS_MS;
+                	time = time/1000;
+                	printStats(time);
                     break;
                 } else if (isPaused) {
                     return;

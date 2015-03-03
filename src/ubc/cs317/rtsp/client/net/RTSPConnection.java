@@ -21,6 +21,7 @@ import java.net.InetAddress;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.PriorityBlockingQueue;
@@ -47,8 +48,8 @@ public class RTSPConnection {
     private static BufferedWriter RTSPWriter;
     private static BufferedReader RTSPReader;
 
-    private static DatagramSocket RTPSocket;
-    private static PriorityBlockingQueue<Frame> queue = new PriorityBlockingQueue<Frame>();
+    private static DatagramSocket RTPPacket;
+    private static PriorityBlockingQueue<Frame> queue = new PriorityBlockingQueue<Frame>(100);
 
     private int cseq;
     private String videoName;
@@ -95,9 +96,12 @@ public class RTSPConnection {
                     RTSPSocket.getOutputStream()));
             RTSPReader = new BufferedReader(new InputStreamReader(
                     RTSPSocket.getInputStream()));
+        } catch (UnknownHostException e) {
+        	throw new RTSPException(e);
         } catch (IOException e) {
             throw new RTSPException(e);
         }
+        
         state = INIT;
         System.out.println("State: " + state);
         System.out.println("RTSP connection established\n");
@@ -125,8 +129,8 @@ public class RTSPConnection {
         this.videoName = videoName;
         if (state == INIT) {
             try {
-                RTPSocket = new DatagramSocket();
-                RTPSocket.setSoTimeout(1000);
+                RTPPacket = new DatagramSocket();
+                RTPPacket.setSoTimeout(1000);
                 sendRTSPRequest("SETUP"); // Send SETUP request.
                 RTSPResponse response = RTSPResponse
                         .readRTSPResponse(RTSPReader);
@@ -135,9 +139,9 @@ public class RTSPConnection {
                     state = READY;
                     sessionID = response.getHeaderValue("Session");
                     currentFrame = 0;
-                } else if (response.getResponseCode() == 404) {
-                    throw new RTSPException("Video not found.");
-                }
+                } else {
+                	handleRTSPException(response.getResponseCode());               	
+                } 
             } catch (SocketException e) {
                 throw new RTSPException("Connection could not be established.");
             } catch (IOException e) {
@@ -180,7 +184,9 @@ public class RTSPConnection {
                     frameSender = new Thread(new FrameHandler());
                     frameSender.start();
                     time = System.currentTimeMillis();
-                }
+                } else {
+                	handleRTSPException(response.getResponseCode());               	
+                } 
             } catch (IOException e) {
                 frameSender.interrupt();
                 throw new RTSPException(e);
@@ -226,7 +232,7 @@ public class RTSPConnection {
         byte[] packet = new byte[BUFFER_LENGTH];
         DatagramPacket RTPpacket = new DatagramPacket(packet, BUFFER_LENGTH);
         try {
-            RTPSocket.receive(RTPpacket);
+        	RTPPacket.receive(RTPpacket);
             Frame frame = parseRTPPacket(RTPpacket.getData(),
                     RTPpacket.getLength());
             queue.put(frame);
@@ -253,7 +259,7 @@ public class RTSPConnection {
         System.out.println("SERVER CLOSED !!!!!!!!!!!!!!!!!!!!!!!");
         isClosed = true;
         rtpTimer.cancel();
-        RTPSocket.close();
+        RTPPacket.close();
         try {
             frameSender.interrupt();
             frameSender.join(10000);
@@ -287,7 +293,9 @@ public class RTSPConnection {
                     replay = false;
                     frameSender.interrupt();
 
-                }
+                } else {
+                	handleRTSPException(response.getResponseCode());               	
+                } 
             } catch (IOException e) {
                 throw new RTSPException("Connectivity error.");
             }
@@ -328,8 +336,10 @@ public class RTSPConnection {
 					} catch (InterruptedException e) {
 						System.out.println("join timed out");
 					}
-                    RTPSocket.close();
-                }
+                    RTPPacket.close();
+                } else {
+                	handleRTSPException(response.getResponseCode());               	
+                } 
             } catch (IOException e) {
                 throw new RTSPException("Connectivity error.");
             }
@@ -348,8 +358,8 @@ public class RTSPConnection {
     public synchronized void closeConnection() {
         try {
             cseq = 0;
-            if (RTPSocket != null) {
-                RTPSocket.close();
+            if (RTPPacket != null) {
+            	RTPPacket.close();
             }
             RTSPSocket.close();
             RTSPWriter.close();
@@ -394,7 +404,7 @@ public class RTSPConnection {
             requestString = request + " " + videoName + " RTSP/1.0" + "\r\n"
                     + "CSeq: " + cseq + "\r\n"
                     + "Transport: RTP/UDP; client_port= "
-                    + RTPSocket.getLocalPort() + "\r\n" + "\r\n";
+                    + RTPPacket.getLocalPort() + "\r\n" + "\r\n";
         } else {
             requestString = request + " " + videoName + " RTSP/1.0" + "\r\n"
                     + "Cseq: " + cseq + "\r\n" + "Session: " + sessionID
@@ -447,6 +457,28 @@ public class RTSPConnection {
         frameNum = 0;
         numOutOfOrder = 0;
         fps = 0;
+    }
+    
+    /**
+     * handle exceptions of RTSP protocol
+     * 
+     * @param responseCode
+     *            RTSP's status code 
+     */
+    private static void handleRTSPException(int responseCode) throws RTSPException {
+    	  if (responseCode == 404) {
+             throw new RTSPException("Video Not Found.");
+         } 
+    	  if (responseCode == 408) {
+         	throw new RTSPException("Request Timeout.");
+         }
+    	  if (responseCode == 454) {
+           	throw new RTSPException("Session Not Found.");    		  
+    	  }
+    	  if (responseCode == 500) {
+    		throw new RTSPException("Internal Server Error.");    		  
+    	  }
+    	
     }
 
     public static class FrameHandler implements Runnable {

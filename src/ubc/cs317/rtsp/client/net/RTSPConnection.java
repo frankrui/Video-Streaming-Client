@@ -51,9 +51,9 @@ public class RTSPConnection {
     private static DatagramSocket RTPPacket;
     private static PriorityBlockingQueue<Frame> queue = new PriorityBlockingQueue<Frame>(100);
 
-    private int cseq;
-    private String videoName;
-    private String sessionID;
+    private static int cseq;
+    private static String videoName;
+    private static String sessionID;
     private Thread frameSender;
 
     private static int currentFrame = 0;
@@ -65,7 +65,8 @@ public class RTSPConnection {
     private static volatile boolean isClosed = false;
     private static volatile boolean isPaused = false;
     private static volatile boolean replay = false;
-
+    private static volatile boolean isFull = false;
+    
     private static int state;
     static final int INIT = 0;
     static final int READY = 1;
@@ -213,15 +214,15 @@ public class RTSPConnection {
         rtpTimer.schedule(new TimerTask() {
             @Override
             public void run() {
-             	while (queue.size() == 80) {
-                		Frame frame = queue.poll();
-                		currentFrame = frame.getSequenceNumber();
-                		session.processReceivedFrame(frame);    
-                        System.out.println(queue.size());
-                		if (queue.size() <= 40) {
-                			break;
-                		}
-             		}
+//             	while (queue.size() == 80) {
+//                		Frame frame = queue.poll();
+//                		currentFrame = frame.getSequenceNumber();
+//                		session.processReceivedFrame(frame);    
+//                        System.out.println(queue.size());
+//                		if (queue.size() <= 40) {
+//                			break;
+//                		}
+//             		}
                 		receiveRTPPacket(); 
             	}
       	}, 0, MINIMUM_DELAY_READ_PACKETS_MS);
@@ -403,7 +404,7 @@ public class RTSPConnection {
      *            the command we are to send.
      * @throws RTSPException
      */
-    private void sendRTSPRequest(String request) throws RTSPException {
+    private static void sendRTSPRequest(String request) throws RTSPException {
         String requestString = null;
         cseq++;
         if (request.equals("SETUP")) {
@@ -504,7 +505,23 @@ public class RTSPConnection {
                     		frame = queue.poll();
                     		currentFrame = frame.getSequenceNumber();
                     		session.processReceivedFrame(frame);
-                    	}                        
+                    	}
+                    	if (queue.size() >= 80 && state == 2) {
+                		sendRTSPRequest("PAUSE");
+                		//need to check response
+                		isFull = true;
+                	}
+                	while (isFull) {
+                		frame = queue.poll();
+                		currentFrame = frame.getSequenceNumber();
+                		session.processReceivedFrame(frame);
+                		if (queue.size() <= 40) {
+                			isFull = false;
+                			sendRTSPRequest("PLAY");
+                    		//need to check response
+                			break;
+                		}                    		
+                	}
                         Thread.sleep(40);
                     } catch (InterruptedException e1) {
                         System.out.println("Interrupted in sending");
@@ -512,7 +529,10 @@ public class RTSPConnection {
                             return;
                         } else
                             continue;
-                    }
+                    } catch (RTSPException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
                 } else if (!isClosed && queue.isEmpty() && !isPaused) {
                     int iterations = 0;
                     while ((queue.size() < 50 && iterations <= 50)) {

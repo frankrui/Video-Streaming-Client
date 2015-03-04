@@ -209,15 +209,22 @@ public class RTSPConnection {
      * next one.
      */
     private void startRTPTimer() {
-
         rtpTimer = new Timer();
         rtpTimer.schedule(new TimerTask() {
             @Override
             public void run() {
-                receiveRTPPacket();
-            }
-        }, 0, MINIMUM_DELAY_READ_PACKETS_MS);
-
+             	while (queue.size() == 80) {
+                		Frame frame = queue.poll();
+                		currentFrame = frame.getSequenceNumber();
+                		session.processReceivedFrame(frame);    
+                        System.out.println(queue.size());
+                		if (queue.size() <= 40) {
+                			break;
+                		}
+             		}
+                		receiveRTPPacket(); 
+            	}
+      	}, 0, MINIMUM_DELAY_READ_PACKETS_MS);
     }
 
     /**
@@ -377,7 +384,6 @@ public class RTSPConnection {
      * @return A Frame object.
      */
     private static Frame parseRTPPacket(byte[] packet, int length) {
-
         byte payloadType = (byte) (packet[1] & 0x7f);
         boolean marker = false;
         if (packet[1] >> 7 == 1) {
@@ -451,9 +457,9 @@ public class RTSPConnection {
             System.out.println("Number of frames lost is 0/sec.");
         }
         System.out.println("The frame rate was " + frameRate + "/sec.");
-        /**System.out.println("The number of frames out of order was "
-                + framesOutOfOrder + "/sec.");
-        System.out.println("Total frames was " + fps + " frames.");**/
+//        System.out.println("The number of frames out of order was "
+//                + framesOutOfOrder + "/sec.");
+        System.out.println("Total frames was " + fps + " frames.");
         frameNum = 0;
         numOutOfOrder = 0;
         fps = 0;
@@ -489,11 +495,11 @@ public class RTSPConnection {
             while (true) {
                 if (!queue.isEmpty() && !isPaused) {
                     System.out.println("Sending frame");
+                    System.out.println(queue.size());
                     try {
                     	Frame frame = queue.peek();
                     	if (frame.getSequenceNumber() < currentFrame){
                     		queue.remove(frame);
-                    		System.out.println("remove frame");
                     	} else {
                     		frame = queue.poll();
                     		currentFrame = frame.getSequenceNumber();

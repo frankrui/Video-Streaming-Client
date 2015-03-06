@@ -82,7 +82,6 @@ public class RTSPConnection {
      */
     public RTSPConnection(Session session, String server, int port)
             throws RTSPException {
-        System.out.println("Establishing RTSP connection");
         this.session = session;
         try {
             this.server = InetAddress.getByName(server);
@@ -98,8 +97,6 @@ public class RTSPConnection {
         }
         
         state = INIT;
-        System.out.println("State: " + state);
-        System.out.println("RTSP connection established\n");
     }
 
     /**
@@ -432,7 +429,6 @@ public class RTSPConnection {
 
             while (true) {
                 if (!queue.isEmpty() && !isPaused) {
-                    System.out.println("Sending frame");
                     try {
                     	Frame frame = queue.peek();
                     	if (frame.getSequenceNumber() < currentFrame){
@@ -453,7 +449,6 @@ public class RTSPConnection {
                 } else if (!isClosed && queue.isEmpty() && !isPaused) {
                     int iterations = 0;
                     while ((queue.size() < MINIMUM_PACKETS_TO_PLAY && iterations <= MINIMUM_PACKETS_TO_PLAY)) {
-                        System.out.println("waiting 40ms");
                         iterations++;
                         try {
                             Thread.sleep(400);

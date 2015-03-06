@@ -49,7 +49,7 @@ public class RTSPConnection {
     private static BufferedReader RTSPReader;
 
     private static DatagramSocket RTPPacket;
-    private static PriorityBlockingQueue<Frame> queue = new PriorityBlockingQueue<Frame>(100);
+    private static PriorityBlockingQueue<Frame> queue = new PriorityBlockingQueue<Frame>();
 
     private static int cseq;
     private static String videoName;
@@ -545,10 +545,6 @@ public class RTSPConnection {
                     }
                 } else if (isClosed && queue.isEmpty()) {
                     System.out.println("done sending");
-                    long currentTime = System.currentTimeMillis();
-                	time = currentTime - time - MINIMUM_DELAY_READ_PACKETS_MS;
-                	time = time/1000;
-                	printStats(time);
                     break;
                 } else if (isPaused) {
                     return;

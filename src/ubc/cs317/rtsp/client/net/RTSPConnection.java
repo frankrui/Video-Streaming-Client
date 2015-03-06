@@ -37,17 +37,14 @@ public class RTSPConnection {
 
     private static final int BUFFER_LENGTH = 15000;
     private static final long MINIMUM_DELAY_READ_PACKETS_MS = 10;
-    private static final long MINIMUM_PACKETS_TO_PLAY = 100;
+    private static final long MINIMUM_PACKETS_TO_PLAY = 50;
 
     private static Session session;
     private Timer rtpTimer;
-
-    // TODO Add additional fields, if necessary
     private InetAddress server;
     private static Socket RTSPSocket;
     private static BufferedWriter RTSPOut;
     private static BufferedReader RTSPIn;
-
     private static DatagramSocket RTPPacket;
     private static PriorityBlockingQueue<Frame> queue = new PriorityBlockingQueue<Frame>();
 
@@ -60,7 +57,6 @@ public class RTSPConnection {
     private static volatile boolean isClosed = false;
     private static volatile boolean isPaused = false;
     private static volatile boolean replay = false;
-
     private static int state;
     static final int INIT = 0;
     static final int READY = 1;
@@ -316,8 +312,7 @@ public class RTSPConnection {
                 throw new RTSPException("Connectivity error.");
             }
         } else {
-            throw new RTSPException(
-                    "Error in sending or receiving the RTSP data.");
+            throw new RTSPException("Error in sending or receiving the RTSP data.");
         }
     }
 
@@ -357,8 +352,7 @@ public class RTSPConnection {
         short sequenceNumber = (short) (((packet[2] & 0xff) << 8) + (packet[3] & 0xff));
         int timestamp = packet[4] << 24 + packet[5] << 16 + packet[6] << 8 + packet[7];
         int offset = 12;
-        return new Frame(payloadType, marker, sequenceNumber, timestamp,
-                packet, offset, length - offset);
+        return new Frame(payloadType, marker, sequenceNumber, timestamp, packet, offset, length - offset);
     }
 
     /**

@@ -37,7 +37,7 @@ public class RTSPConnection {
 
     private static final int BUFFER_LENGTH = 15000;
     private static final long MINIMUM_DELAY_READ_PACKETS_MS = 10;
-    private static final long MINIMUM_PACKETS_TO_PLAY = 50;
+    private static final long MINIMUM_PACKETS_TO_PLAY = 100;
 
     private static Session session;
     private Timer rtpTimer;
@@ -94,8 +94,7 @@ public class RTSPConnection {
         	throw new RTSPException(e);
         } catch (IOException e) {
             throw new RTSPException(e);
-        }
-        
+        }       
         state = INIT;
     }
 
@@ -221,7 +220,6 @@ public class RTSPConnection {
                     RTPpacket.getLength());
             queue.put(frame);
         } catch (SocketTimeoutException e) {
-            System.out.println("Timed out");
             if (isPaused) {
                 rtpTimer.cancel();
                 frameSender.interrupt();
@@ -229,7 +227,6 @@ public class RTSPConnection {
                 handleClosed();
             }
         } catch (IOException e) {
-            System.out.println("IO Exception");
             if (!isPaused) {
                 handleClosed();
             }
@@ -244,7 +241,6 @@ public class RTSPConnection {
             frameSender.interrupt();
             frameSender.join(10000);
         } catch (InterruptedException e1) {
-            System.out.println("Join timedout");
             e1.printStackTrace();
         }
     }
@@ -311,7 +307,6 @@ public class RTSPConnection {
                     try {
 						frameSender.join(10000);
 					} catch (InterruptedException e) {
-						System.out.println("join timed out");
 					}
                     RTPPacket.close();
                 } else {
@@ -440,7 +435,6 @@ public class RTSPConnection {
                     	}                        
                         Thread.sleep(40);
                     } catch (InterruptedException e1) {
-                        System.out.println("Interrupted in sending");
                         if (isPaused || replay) {
                             return;
                         } else
@@ -453,7 +447,6 @@ public class RTSPConnection {
                         try {
                             Thread.sleep(400);
                         } catch (InterruptedException e1) {
-                            System.out.println("interrupted in waiting");
                             if (!isPaused || !replay) {
                                 break;
                             } else

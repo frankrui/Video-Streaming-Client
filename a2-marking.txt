@@ -1,0 +1,50 @@
+Total before late penalty: [   /110]
+
+
+=== GRADE DETAILS ===
+
+
+PART A  [  /61]
+
+
+[ /4]	All required files are provided as specified and Java files compile properly       
+[ /2]	Establishes a connection with the RTSP server                                      
+[ /4]	SETUP – creates a valid datagram socket with a randomly chosen port                
+[ /4]	SETUP – sends a properly formatted request
+[/4]	SETUP – correctly receives a response and parses the session number from it        
+[/4]	SETUP – correctly handles responses with a response code different than 200        
+[/4]	PLAY – sends a properly formatted request                                          
+[/2]	PLAY – starts the timer responsible for receiving frames                           
+[/4]	PLAY – correctly receives a response                                               
+[/2]    Correctly handles play being pressed while currently playing                       
+[/4]	PAUSE – sends a properly formatted request                                         
+[/4]	PAUSE – correctly receives a response                                              
+[/4]	TEARDOWN – sends a properly formatted request                                      
+[/4]	TEARDOWN – correctly receives a response                                           
+[/4]	TEARDOWN – stops the frame timer and closes the datagram socket                    
+[/4]	Correctly closes the RTSP connection on close                                      
+[/3]	Correctly handles an unexpected connection interruption
+
+
+PART B [  /36]
+
+[/4]	Funky scenarios are reasonably explained and justified
+[/4]	Stats for funky scenarios are similar to produced values
+[/4]	Reasonable summary of funky scenarios and the problems that cause them
+[/4]	New “smooth” program works correctly for regular scenario                          
+[/4]	Reorders delayed packets                                                           
+[/4]	Buffers frames arriving too fast and plays them at the correct speed               
+[/4]	Buffers frames arriving too slow and plays a snippet a time at correct speed       
+[/4]	Reasonable approach (or explanation) for dealing with lost packets                 
+[/2]    Does not assume an infinite amount of space to buffer frames. (Sends a pause when 
+        buffer space is full and resumes before empty?)                                  
+[/2]   Recognizes that the buffer is essentially the producer consumer problem and takes steps
+        to ensure race condition on buffer doesn't occur.                                
+
+
+General comments [ /13]
+
+[ /4]  Added code is appropriately commented, indented etc.                              
+[ /6]  Appropriate data structures are selected and resonable algorithms                  
+       employed.
+[ /3]  Marker's discretion.
